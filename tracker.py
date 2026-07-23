@@ -5,7 +5,7 @@ from mediapipe.tasks.python import vision
 import socket
 import time
 
-# --- UDP Setup (unchanged, Godot side stays the same) ---
+# --- UDP Setup ---
 UDP_IP = "127.0.0.1"
 UDP_PORT = 4242
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -33,12 +33,13 @@ R_SHOULDER = 12
 L_HIP = 23
 R_HIP = 24
 
-# --- State machine (same as before) ---
+# --- State machine ---
 current_state = "C"   # C=Center, L=Left, R=Right, J=Jump, D=Duck
 last_state = "C"
 last_jump_time = 0
 last_duck_time = 0
 baseline_body_height = 0.0
+baseline_shoulder_y = 0.0  # <--- NEW: Tracks vertical starting position
 
 # --- Manual landmark drawing (replaces mp.solutions.drawing_utils) ---
 # Pairs of landmark indices to connect with lines (a subset of BlazePose)
@@ -114,7 +115,11 @@ with PoseLandmarker.create_from_options(options) as landmarker:
 
             # --- Calibration (first 2 seconds) ---
             if time.time() - start_time < 2:
+                # Establish the "ruler" (torso height)
                 baseline_body_height = abs(shoulder_y - hip_y)
+                # Establish the vertical starting position
+                baseline_shoulder_y = shoulder_y # <--- NEW: Grab starting Y coordinate
+                
                 cv2.putText(frame, "CALIBRATING...", (50, 50),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             else:
@@ -126,15 +131,20 @@ with PoseLandmarker.create_from_options(options) as landmarker:
                 elif shoulder_x > 0.65:
                     current_state = "R"
 
-                # 2. Jump detection (nose rises well above shoulders)
-                if nose.y < shoulder_y - 0.15 and time.time() - last_jump_time > 1:
+                # --- NEW JUMP/DUCK LOGIC ---
+                # Calculate a dynamic threshold based on the person's size
+                # 25% of their torso height is a good threshold for jumps/ducks
+                vertical_threshold = baseline_body_height * 0.25 
+
+                # 2. Jump detection (Shoulders move UP from starting position)
+                # Note: y decreases as you go UP the screen
+                if shoulder_y < (baseline_shoulder_y - vertical_threshold) and time.time() - last_jump_time > 1:
                     current_state = "J"
                     last_jump_time = time.time()
 
-                # 3. Duck detection (torso height shrinks => squatting)
-                current_body_height = abs(shoulder_y - hip_y)
-                if (current_body_height < baseline_body_height * 0.6
-                        and time.time() - last_duck_time > 1):
+                # 3. Duck detection (Shoulders move DOWN from starting position)
+                # Note: y increases as you go DOWN the screen
+                elif shoulder_y > (baseline_shoulder_y + vertical_threshold) and time.time() - last_duck_time > 1:
                     current_state = "D"
                     last_duck_time = time.time()
 
