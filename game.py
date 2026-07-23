@@ -16,6 +16,14 @@ no other setup needed.
 """
 
 from ursina import *
+from panda3d.core import loadPrcFileData
+# Every log from this Mac shows "iCCP: known incorrect sRGB profile", and the
+# visible symptom (muted/mid-brightness colors washing toward white, while
+# highly saturated colors like the obstacles survive) matches a gamma/sRGB
+# double-correction issue, not a shader problem. Disabling automatic sRGB
+# framebuffer conversion stops Panda3D from re-applying a gamma curve on
+# top of whatever macOS's color pipeline is already doing.
+loadPrcFileData('', 'framebuffer-srgb false')
 import pkgutil
 import importlib
 import re
@@ -88,7 +96,15 @@ import socket
 import random
 
 app = Ursina(title="Body Runner", borderless=False)
-window.color = color.rgb(140, 200, 235)  # sky
+# Ursina's built-in Sky() actually uses a real bundled gradient texture
+# ('sky_default') and just tints it -- if that texture doesn't load right,
+# the tint can't fix it. Building our own plain solid-color dome sidesteps
+# that entirely: no texture, just a big sphere in a flat color, always
+# rendered behind everything else.
+sky_dome = Entity(model='sphere', color=color.rgb32(135, 206, 250), scale=880,
+                   double_sided=True, unlit=True, collider=None)
+sky_dome.parent = camera
+window.color = color.rgb32(135, 206, 250)  # backup in case the dome doesn't cover a gap
 application.development_mode = False  # hides the debug/stats overlay
 
 # ---------------------------------------------------------------------------
@@ -120,10 +136,15 @@ NUM_CHUNKS = 7                         # visible chunks ahead of player at once
 COLLISION_WINDOW = 1.1                 # how close (in z) counts as "reached" an obstacle
 
 # ---------------------------------------------------------------------------
-# Ground -- lane strips so lanes read clearly
+# Ground safety net -- one big plane that always exists and always stays
+# centered under the player, independent of chunk recycling. The colored
+# lane strips (built per-chunk below) sit slightly above this and give the
+# lane markings; this plane guarantees there is never a gap of bare white
+# under your feet no matter what the chunk logic is doing.
 # ---------------------------------------------------------------------------
-for lane_x, tint in zip((-2.6, 0, 2.6), (color.gray, color.light_gray, color.gray)):
-    pass  # ground tiles are created per-chunk below instead (keeps recycling simple)
+ground_safety_plane = Entity(model='cube', color=color.rgb32(70, 150, 80),
+                              scale=(40, 0.1, 400), position=(0, -0.1, 0),
+                              collider=None)
 
 # ---------------------------------------------------------------------------
 # Player (invisible capsule-ish box; camera is first-person, attached to it)
@@ -150,18 +171,23 @@ run_time = 0
 # ---------------------------------------------------------------------------
 # UI
 # ---------------------------------------------------------------------------
-score_text = Text(text="Score: 0", position=(-0.85, 0.45), scale=1.6, color=color.white,
+# Fixed x positions like -0.85 assume a specific aspect ratio and can clip
+# off-screen on narrower windows. Anchoring relative to window.aspect_ratio
+# keeps this text fully on-screen no matter the window's shape.
+UI_LEFT = -window.aspect_ratio / 2 + 0.05
+
+score_text = Text(text="Score: 0", position=(UI_LEFT, 0.45), scale=1.6, color=color.white,
                    background=True)
-coin_text = Text(text="Coins: 0", position=(-0.85, 0.40), scale=1.4, color=color.yellow,
+coin_text = Text(text="Coins: 0", position=(UI_LEFT, 0.40), scale=1.4, color=color.yellow,
                   background=True)
 help_text = Text(
     text="Lean L/R = change lane   Jump = hop   Duck = crouch\n(Keyboard: A/D, Space, S)",
-    position=(-0.85, -0.38), scale=0.9, color=color.rgba(255, 255, 255, 200),
+    position=(UI_LEFT, -0.38), scale=0.9, color=color.rgba(255, 255, 255, 200),
     background=True
 )
-game_over_text = Text(text="", position=(-0.35, 0.1), scale=2.5, color=color.red, enabled=False,
-                       background=True)
-restart_text = Text(text="Press R to restart", position=(-0.28, -0.02), scale=1.4,
+game_over_text = Text(text="", position=(0, 0.1), origin=(0, 0), scale=2.5, color=color.red,
+                       enabled=False, background=True)
+restart_text = Text(text="Press R to restart", position=(0, -0.02), origin=(0, 0), scale=1.4,
                      color=color.white, enabled=False, background=True)
 
 
@@ -189,7 +215,7 @@ class Chunk:
         mid_z = z_start + CHUNK_LENGTH / 2
 
         # Ground: three lane strips, subtle color difference so lanes read clearly
-        for lx, c in zip((-2.6, 0, 2.6), (color.rgb(70, 70, 78), color.rgb(85, 85, 95), color.rgb(70, 70, 78))):
+        for lx, c in zip((-2.6, 0, 2.6), (color.rgb32(70, 70, 78), color.rgb32(85, 85, 95), color.rgb32(70, 70, 78))):
             ground = Entity(model='cube', color=c, position=(lx, 0, mid_z),
                              scale=(2.4, 0.2, CHUNK_LENGTH))
             self.entities.append(ground)
@@ -202,7 +228,7 @@ class Chunk:
                 bz = z_start + random.uniform(0, CHUNK_LENGTH)
                 bx = side * random.uniform(6, 11)
                 b = Entity(model='cube',
-                           color=color.rgb(*[random.randint(90, 160)] * 3),
+                           color=color.rgb32(*[random.randint(90, 160)] * 3),
                            position=(bx, h / 2, bz),
                            scale=(random.uniform(3, 6), h, random.uniform(3, 6)))
                 self.entities.append(b)
@@ -373,6 +399,7 @@ def update():
     # Forward movement
     player.z += speed * time.dt
     distance_traveled += speed * time.dt
+    ground_safety_plane.z = player.z  # keep the safety-net ground under the player
 
     # Smooth lane snapping
     player.x = lerp(player.x, target_x, time.dt * LANE_SNAP_SPEED)

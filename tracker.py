@@ -134,7 +134,7 @@ with PoseLandmarker.create_from_options(options) as landmarker:
                 # --- NEW JUMP/DUCK LOGIC ---
                 # Calculate a dynamic threshold based on the person's size
                 # 25% of their torso height is a good threshold for jumps/ducks
-                vertical_threshold = baseline_body_height * 0.25 
+                vertical_threshold = baseline_body_height * 0.15 
 
                 # 2. Jump detection (Shoulders move UP from starting position)
                 # Note: y decreases as you go UP the screen
