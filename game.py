@@ -130,7 +130,9 @@ MAX_SPEED = 34
 SPEED_RAMP = 0.15                      # speed gained per second survived
 JUMP_FORCE = 8.5
 GRAVITY = 22
-DUCK_SCALE_Y = 0.45
+CAMERA_EYE_HEIGHT = 0.35
+CAMERA_DUCK_HEIGHT = -0.15
+CAMERA_DUCK_LERP_SPEED = 10
 CHUNK_LENGTH = 20
 NUM_CHUNKS = 7                         # visible chunks ahead of player at once
 COLLISION_WINDOW = 1.1                 # how close (in z) counts as "reached" an obstacle
@@ -281,7 +283,6 @@ def reset_game():
     is_ducking = False
     y_velocity = 0
     player.position = (0, ground_y, 0)
-    player.scale_y = 1.8
     distance_traveled = 0
     coins_collected = 0
     speed = BASE_SPEED
@@ -330,10 +331,8 @@ def input(key):
         y_velocity = JUMP_FORCE
     elif key in ('s', 'down arrow'):
         is_ducking = True
-        player.scale_y = DUCK_SCALE_Y
     elif key in ('s up', 'down arrow up'):
         is_ducking = False
-        player.scale_y = 1.8
 
 
 def read_tracker():
@@ -360,24 +359,20 @@ def apply_tracker_state(state):
         lane = -1
         target_x = LANES[lane]
         is_ducking = False
-        player.scale_y = 1.8
     elif state == 'R':
         lane = 1
         target_x = LANES[lane]
         is_ducking = False
-        player.scale_y = 1.8
     elif state == 'C':
         lane = 0
         target_x = LANES[lane]
         is_ducking = False
-        player.scale_y = 1.8
     elif state == 'J':
         if not is_jumping and not is_ducking:
             is_jumping = True
             y_velocity = JUMP_FORCE
     elif state == 'D':
         is_ducking = True
-        player.scale_y = DUCK_SCALE_Y
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +409,9 @@ def update():
             y_velocity = 0
 
     # Camera bob for a bit of "running" feel
-    camera.y = 0.35 + abs(math.sin(run_time * 9)) * 0.03 * (0 if is_jumping else 1)
+    target_cam_y = CAMERA_DUCK_HEIGHT if is_ducking else CAMERA_EYE_HEIGHT
+    bob = abs(math.sin(run_time * 9)) * 0.03 if not (is_jumping or is_ducking) else 0
+    camera.y = lerp(camera.y, target_cam_y + bob, time.dt * CAMERA_DUCK_LERP_SPEED)
 
     # Recycle chunks that are now behind the player
     for c in chunks:
