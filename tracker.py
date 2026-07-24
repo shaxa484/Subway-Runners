@@ -67,6 +67,9 @@ def draw_landmarks(frame, landmarks, w, h):
 
 # --- Open webcam ---
 cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+cap.set(cv2.CAP_PROP_FPS, 60)
 print("Calibrating... Please stand straight in front of the camera for 2 seconds.")
 start_time = time.time()
 prev_timestamp_ms = 0
@@ -125,7 +128,7 @@ with PoseLandmarker.create_from_options(options) as landmarker:
                 # --- INDEPENDENT THRESHOLDS ---
                 # You can now tune jumping and ducking separately!
                 jump_threshold = baseline_body_height * 0.15 
-                duck_threshold = baseline_body_height * 0.15 
+                duck_threshold = baseline_body_height * 0.25 
 
                 # 2. Jump detection (SHOULDERS move UP)
                 if shoulder_y < (baseline_shoulder_y - jump_threshold) and time.time() - last_jump_time > 1:

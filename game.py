@@ -96,6 +96,7 @@ import socket
 import random
 
 app = Ursina(title="Body Runner", borderless=False)
+
 # Ursina's built-in Sky() actually uses a real bundled gradient texture
 # ('sky_default') and just tints it -- if that texture doesn't load right,
 # the tint can't fix it. Building our own plain solid-color dome sidesteps
@@ -124,7 +125,7 @@ except OSError as e:
 # Tunables
 # ---------------------------------------------------------------------------
 LANES = {-1: -2.6, 0: 0, 1: 2.6}      # lane index -> world x position
-LANE_SNAP_SPEED = 10                   # how quickly player slides between lanes
+LANE_SNAP_SPEED = 14                   # how quickly player slides between lanes
 BASE_SPEED = 14                        # forward units/sec
 MAX_SPEED = 34
 SPEED_RAMP = 0.15                      # speed gained per second survived
@@ -171,6 +172,11 @@ coins_collected = 0
 speed = BASE_SPEED
 game_over = False
 run_time = 0
+
+coin_sound = Audio('coin', autoplay=False)
+game_over_sound = Audio('death', autoplay=False)
+
+
 
 # ---------------------------------------------------------------------------
 # UI
@@ -303,6 +309,7 @@ def end_game(reason):
     game_over_text.text = f"GAME OVER\n{reason}"
     game_over_text.enabled = True
     restart_text.enabled = True
+    game_over_sound.play()
 
 
 # ---------------------------------------------------------------------------
@@ -384,9 +391,9 @@ def update():
     state = read_tracker()
     if state:
         apply_tracker_state(state)
-        global duck_timer
-        duck_timer = MIN_DUCK_DURATION if is_ducking else max(duck_timer - time.dt, 0)
-        effective_ducking = is_ducking or duck_timer > 0
+    global duck_timer
+    duck_timer = MIN_DUCK_DURATION if is_ducking else max(duck_timer - time.dt, 0)
+    effective_ducking = is_ducking or duck_timer > 0
 
     if game_over:
         return
@@ -432,6 +439,7 @@ def update():
                 coin['collected'] = True
                 coin['entity'].enabled = False
                 coins_collected += 1
+                coin_sound.play()
 
     # Obstacle collision
     for c in chunks:
@@ -468,5 +476,6 @@ if os.environ.get('AUTO_SCREENSHOT'):
         base.win.saveScreenshot('verify6.png')
         application.quit()
     invoke(_snap, delay=4)
-
+bg_music = Audio('main.mp3', loop=True, autoplay=True)
+bg_music.volume = 0.5 
 app.run()
