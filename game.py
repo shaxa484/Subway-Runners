@@ -136,6 +136,8 @@ CAMERA_DUCK_LERP_SPEED = 10
 CHUNK_LENGTH = 20
 NUM_CHUNKS = 7                         # visible chunks ahead of player at once
 COLLISION_WINDOW = 1.1                 # how close (in z) counts as "reached" an obstacle
+MIN_DUCK_DURATION = 0.6  # seconds the duck stays active, even if the signal is brief
+duck_timer = 0
 
 # ---------------------------------------------------------------------------
 # Ground safety net -- one big plane that always exists and always stays
@@ -243,14 +245,12 @@ class Chunk:
             ox = LANES[obs_lane]
 
             if obs_type == 'barrier':      # low box -- jump over it
-                e = Entity(model='cube', color=color.orange,
-                           position=(ox, 0.5, oz), scale=(2.2, 1.0, 0.6))
+                e = Entity(model='short_obstacle', position=(ox, 0.9, oz), scale=(0.5,0.5,0.5),rotation_y=90)
+                
             elif obs_type == 'beam':        # overhead bar -- duck under it
-                e = Entity(model='cube', color=color.azure,
-                           position=(ox, 2.1, oz), scale=(2.2, 0.6, 0.6))
+                e = Entity(model='high_obstacle', position=(ox, 1.7, oz), scale=(0.5,0.5,0.5),rotation_y=90)
             else:                            # 'train' -- full lane, must switch
-                e = Entity(model='cube', color=color.red,
-                           position=(ox, 1.6, oz), scale=(2.3, 3.2, 2.0))
+                e = Entity(model='train', position=(ox, 0.8, oz), scale=(0.4, 0.4, 0.4),rotation_y=90)
 
             self.entities.append(e)
             self.obstacles.append({'entity': e, 'lane': obs_lane, 'z': oz,
@@ -264,8 +264,8 @@ class Chunk:
         coin_z_start = z_start + random.uniform(2, 6)
         for i in range(5):
             cz = coin_z_start + i * 1.4
-            coin = Entity(model='sphere', color=color.gold,
-                          position=(LANES[coin_lane], 1.1, cz), scale=0.4)
+            coin = Entity(model='coin', 
+                          position=(LANES[coin_lane], 1.1, cz), scale=1.4)
             self.entities.append(coin)
             self.coins.append({'entity': coin, 'lane': coin_lane, 'z': cz, 'collected': False})
 
@@ -384,6 +384,9 @@ def update():
     state = read_tracker()
     if state:
         apply_tracker_state(state)
+        global duck_timer
+        duck_timer = MIN_DUCK_DURATION if is_ducking else max(duck_timer - time.dt, 0)
+        effective_ducking = is_ducking or duck_timer > 0
 
     if game_over:
         return
@@ -409,8 +412,8 @@ def update():
             y_velocity = 0
 
     # Camera bob for a bit of "running" feel
-    target_cam_y = CAMERA_DUCK_HEIGHT if is_ducking else CAMERA_EYE_HEIGHT
-    bob = abs(math.sin(run_time * 9)) * 0.03 if not (is_jumping or is_ducking) else 0
+    target_cam_y = CAMERA_DUCK_HEIGHT if effective_ducking else CAMERA_EYE_HEIGHT
+    bob = abs(math.sin(run_time * 9)) * 0.03 if not (is_jumping or effective_ducking) else 0
     camera.y = lerp(camera.y, target_cam_y + bob, time.dt * CAMERA_DUCK_LERP_SPEED)
 
     # Recycle chunks that are now behind the player
@@ -439,7 +442,7 @@ def update():
                 obs['resolved'] = True
                 if obs['type'] == 'barrier' and is_jumping:
                     continue
-                elif obs['type'] == 'beam' and is_ducking:
+                elif obs['type'] == 'beam' and effective_ducking:
                     continue
                 else:
                     end_game({
