@@ -140,6 +140,17 @@ COLLISION_WINDOW = 1.1                 # how close (in z) counts as "reached" an
 MIN_DUCK_DURATION = 0.6  # seconds the duck stays active, even if the signal is brief
 duck_timer = 0
 
+MEASURED_LENGTH = 62.738677  # from measurement, z-axis
+TARGET_CHUNK_LENGTH = 22
+TRACK_SCALE = TARGET_CHUNK_LENGTH / MEASURED_LENGTH   # ≈ 0.35
+CHUNK_LENGTH = TARGET_CHUNK_LENGTH
+OBSTACLE_EVERY_N_CHUNKS = 2
+
+TRACK_SCALE_X = 0.26   # increase this to widen -- tweak freely, doesn't affect length
+TRACK_SCALE_Y = TRACK_SCALE
+TRACK_SCALE_Z = 0.55
+
+
 # ---------------------------------------------------------------------------
 # Ground safety net -- one big plane that always exists and always stays
 # centered under the player, independent of chunk recycling. The colored
@@ -147,9 +158,7 @@ duck_timer = 0
 # lane markings; this plane guarantees there is never a gap of bare white
 # under your feet no matter what the chunk logic is doing.
 # ---------------------------------------------------------------------------
-ground_safety_plane = Entity(model='cube', color=color.rgb32(70, 150, 80),
-                              scale=(40, 0.1, 400), position=(0, -0.1, 0),
-                              collider=None)
+ground_safety_plane = Entity(model='cube', color=color.rgb32(70, 150, 80),scale=(40, 0.1, 400), position=(0, -9.1, 0),collider=None)
 
 # ---------------------------------------------------------------------------
 # Player (invisible capsule-ish box; camera is first-person, attached to it)
@@ -206,7 +215,8 @@ restart_text = Text(text="Press R to restart", position=(0, -0.02), origin=(0, 0
 # Recycled (moved to the front) once the player passes it.
 # ---------------------------------------------------------------------------
 class Chunk:
-    def __init__(self, z_start):
+    def __init__(self, z_start, index=0):
+        self.index = index
         self.z_start = z_start
         self.entities = []
         self.obstacles = []   # list of dicts: {entity, lane, world_z, type, resolved}
@@ -224,43 +234,31 @@ class Chunk:
         self.z_start = z_start
         mid_z = z_start + CHUNK_LENGTH / 2
 
-        # Ground: three lane strips, subtle color difference so lanes read clearly
-        for lx, c in zip((-2.6, 0, 2.6), (color.rgb32(70, 70, 78), color.rgb32(85, 85, 95), color.rgb32(70, 70, 78))):
-            ground = Entity(model='cube', color=c, position=(lx, 0, mid_z),
-                             scale=(2.4, 0.2, CHUNK_LENGTH))
-            self.entities.append(ground)
+        track = Entity(model='env', position=(0, 4, z_start + CHUNK_LENGTH/2),
+                scale=(TRACK_SCALE_X, TRACK_SCALE_Y, TRACK_SCALE_Z),rotation_y=90)
+        self.entities.append(track)
 
-        # City buildings on both sides
-        for side in (-1, 1):
-            num_buildings = random.randint(2, 4)
-            for i in range(num_buildings):
-                h = random.uniform(4, 14)
-                bz = z_start + random.uniform(0, CHUNK_LENGTH)
-                bx = side * random.uniform(6, 11)
-                b = Entity(model='cube',
-                           color=color.rgb32(*[random.randint(90, 160)] * 3),
-                           position=(bx, h / 2, bz),
-                           scale=(random.uniform(3, 6), h, random.uniform(3, 6)))
-                self.entities.append(b)
+        
 
         # Obstacle (roughly 70% chance per chunk, one lane blocked)
-        if random.random() < 0.7:
-            obs_lane = random.choice([-1, 0, 1])
-            obs_type = random.choice(['barrier', 'beam', 'train'])
-            oz = mid_z + random.uniform(-3, 3)
-            ox = LANES[obs_lane]
+        if self.index % OBSTACLE_EVERY_N_CHUNKS == 0:
+            if random.random() < 0.7:
+                obs_lane = random.choice([-1, 0, 1])
+                obs_type = random.choice(['barrier', 'beam', 'train'])
+                oz = mid_z + random.uniform(-3, 3)
+                ox = LANES[obs_lane]
 
-            if obs_type == 'barrier':      # low box -- jump over it
-                e = Entity(model='short_obstacle', position=(ox, 0.9, oz), scale=(0.5,0.5,0.5),rotation_y=90)
-                
-            elif obs_type == 'beam':        # overhead bar -- duck under it
-                e = Entity(model='high_obstacle', position=(ox, 1.7, oz), scale=(0.5,0.5,0.5),rotation_y=90)
-            else:                            # 'train' -- full lane, must switch
-                e = Entity(model='train', position=(ox, 0.8, oz), scale=(0.4, 0.4, 0.4),rotation_y=90)
+                if obs_type == 'barrier':      # low box -- jump over it
+                    e = Entity(model='short_obstacle', position=(ox, 0.9, oz), scale=(0.5,0.5,0.5),rotation_y=90)
+                    
+                elif obs_type == 'beam':        # overhead bar -- duck under it
+                    e = Entity(model='high_obstacle', position=(ox, 1.7, oz), scale=(0.5,0.5,0.5),rotation_y=90)
+                else:                            # 'train' -- full lane, must switch
+                    e = Entity(model='train', position=(ox, 0.8, oz), scale=(0.4, 0.4, 0.4),rotation_y=90)
 
-            self.entities.append(e)
-            self.obstacles.append({'entity': e, 'lane': obs_lane, 'z': oz,
-                                    'type': obs_type, 'resolved': False})
+                self.entities.append(e)
+                self.obstacles.append({'entity': e, 'lane': obs_lane, 'z': oz,
+                                        'type': obs_type, 'resolved': False})
 
         # Coins -- a little arc of 5 in a free lane
         free_lanes = [-1, 0, 1]
@@ -276,7 +274,7 @@ class Chunk:
             self.coins.append({'entity': coin, 'lane': coin_lane, 'z': cz, 'collected': False})
 
 
-chunks = [Chunk(i * CHUNK_LENGTH) for i in range(NUM_CHUNKS)]
+chunks = [Chunk(i * CHUNK_LENGTH, index=i) for i in range(NUM_CHUNKS)]
 
 
 def reset_game():
@@ -404,7 +402,7 @@ def update():
     # Forward movement
     player.z += speed * time.dt
     distance_traveled += speed * time.dt
-    ground_safety_plane.z = player.z  # keep the safety-net ground under the player
+    #ground_safety_plane.z = player.z  # keep the safety-net ground under the player
 
     # Smooth lane snapping
     player.x = lerp(player.x, target_x, time.dt * LANE_SNAP_SPEED)
@@ -429,6 +427,7 @@ def update():
             farthest_z = max(ch.z_start for ch in chunks)
             c.clear()
             c.build(farthest_z + CHUNK_LENGTH)
+            c.index += 1
 
     # Coin collection
     for c in chunks:
