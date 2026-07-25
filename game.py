@@ -150,6 +150,8 @@ TRACK_SCALE_X = 0.26   # increase this to widen -- tweak freely, doesn't affect 
 TRACK_SCALE_Y = TRACK_SCALE
 TRACK_SCALE_Z = 0.55
 
+COLLISION_WINDOW_BY_TYPE = {'barrier': 1.1, 'beam': 1.1, 'train': 2.5}
+
 
 # ---------------------------------------------------------------------------
 # Ground safety net -- one big plane that always exists and always stays
@@ -445,7 +447,7 @@ def update():
         for obs in c.obstacles:
             if obs['resolved']:
                 continue
-            if abs(obs['z'] - player.z) < COLLISION_WINDOW and obs['lane'] == lane:
+            if abs(obs['z'] - player.z) < COLLISION_WINDOW_BY_TYPE[obs['type']]  and obs['lane'] == lane:
                 obs['resolved'] = True
                 if obs['type'] == 'barrier' and is_jumping:
                     continue

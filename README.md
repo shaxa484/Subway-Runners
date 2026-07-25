@@ -18,7 +18,7 @@ This project bridges Python-based pose estimation with the Game itself:
 * [x] Basic Python webcam tracker implementation (`tracker.py`).
 * [x] Foundation for the game environment.
 * [x] Establish smooth data bridging between tracker and game.
-* [ ] Use real game models and sound effects for better experience .
+* [x] Use real game models and sound effects for better experience .
 * [ ] Fully polishing.
 
 *Note: Gameplay footage and a demonstration of the webcam tracking in action will be added once it is fully polished!*
