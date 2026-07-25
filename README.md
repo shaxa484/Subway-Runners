@@ -6,7 +6,7 @@ Instead of using a keyboard or controller, this project uses a webcam and comput
 
 ## 🎮 How It Works
 This project bridges Python-based pose estimation with the Game itself:
-* **The Tracker (`tracker.py`):** A Python script that uses computer vision (via webcam) to detect player movement, body position, and gestures.
+* **The Tracker (`tracker.py`):** A Python script that uses computer vision (via webcam) to detect player movement, body position, and gestures.(Current methods are a bit rigid but I'm working on more efficient and stable methods)
 * **The Game:** Built in Python with Ursina and Panda3d libraries , which receives the motion data from the tracker and translates it into character actions (running, switching lanes, jumping).
 
 ## 🛠️ Tech Stack
