@@ -4,7 +4,7 @@ Body-Controlled Endless Runner
 First-person Subway-Surfers-style runner. Controlled by tracker.py, which
 sends single-character states over UDP (127.0.0.1:4242):
     C = center / stand up      L = lean left      R = lean right
-    J = jump (one-shot)        D = duck (hold)
+    J = jump (one-shot)        D = duck (hold)    RESET = Raise a hand to restart after game over  
 
 Also fully playable with a keyboard for testing without the webcam:
     A / Left  = lean left        D / Right = lean right
@@ -197,21 +197,30 @@ game_over_sound = Audio('death', autoplay=False)
 # keeps this text fully on-screen no matter the window's shape.
 UI_LEFT = -window.aspect_ratio / 2 + 0.05
 
-score_text = Text(text="Score: 0", position=(UI_LEFT, 0.45), scale=1.6, color=color.white,
-                   background=True)
-coin_text = Text(text="Coins: 0", position=(UI_LEFT, 0.40), scale=1.4, color=color.yellow,
-                  background=True)
+hud_panel = Entity(parent=camera.ui, model='quad', color=color.rgba32(15, 15, 20, 170),
+                    scale=(0.34, 0.15), position=(UI_LEFT + 0.16, 0.415))
+score_text = Text(text="Score: 0", position=(UI_LEFT, 0.46), scale=1.6, color=color.white)
+coin_text = Text(text="Coins: 0", position=(UI_LEFT, 0.40), scale=1.4, color=color.yellow)
 help_text = Text(
-    text="Lean L/R = change lane   Jump = hop   Duck = crouch\n(Keyboard: A/D, Space, S)",
-    position=(UI_LEFT, -0.38), scale=0.9, color=color.rgba(255, 255, 255, 200),
-    background=True
+    text="Lean L/R = change lane   Jump = hop   \nDuck = crouch Hand raise = restart\n(Keyboard: A/D, Space, S)",
+    position=(UI_LEFT, -0.38), scale=0.9, color=color.rgba32(255, 255, 255, 220)
 )
-game_over_text = Text(text="", position=(0, 0.1), origin=(0, 0), scale=2.5, color=color.red,
-                       enabled=False, background=True)
-restart_text = Text(text="Press R to restart", position=(0, -0.02), origin=(0, 0), scale=1.4,
-                     color=color.white, enabled=False, background=True)
 
+game_over_panel_border = Entity(parent=camera.ui, model='quad', color=color.rgba32(200, 40, 40, 255),
+                                 scale=(window.aspect_ratio + 0.02, 0.36), position=(0, 0.06),
+                                 enabled=False, z=0.01)
 
+game_over_panel = Entity(parent=camera.ui, model='quad', color=color.rgba32(20, 10, 10, 210),
+                          scale=(window.aspect_ratio, 0.34), position=(0, 0.06), enabled=False)
+
+game_over_text_shadow = Text(text="", position=(0.006, 0.144), origin=(0, 0), scale=2.2,
+                              color=color.black, enabled=False)
+game_over_text = Text(text="", position=(0, 0.15), origin=(0, 0), scale=2.2, color=color.red,
+                       enabled=False)
+restart_text_shadow = Text(text="Press R to restart", position=(0.004, -0.034), origin=(0, 0),
+                            scale=1.3, color=color.black, enabled=False)
+restart_text = Text(text="Press R to restart", position=(0, -0.03), origin=(0, 0), scale=1.3,
+                     color=color.white, enabled=False)
 # ---------------------------------------------------------------------------
 # Chunk: one 20-unit slice of track. Holds ground, buildings, obstacles, coins.
 # Recycled (moved to the front) once the player passes it.
@@ -301,14 +310,23 @@ def reset_game():
 
     game_over_text.enabled = False
     restart_text.enabled = False
-
+    game_over_panel_border.enabled = False
+    game_over_panel.enabled = False
+    restart_text_shadow.enabled = False
+    game_over_text_shadow.enabled = False
 
 def end_game(reason):
     global game_over
     game_over = True
     game_over_text.text = f"GAME OVER\n{reason}"
+    game_over_text_shadow.text = game_over_text.text
     game_over_text.enabled = True
     restart_text.enabled = True
+    game_over_panel.enabled = True
+    game_over_panel_border.enabled = True   # (or False in reset_game)
+    game_over_text_shadow.enabled = True
+    restart_text_shadow.enabled = True
+
     game_over_sound.play()
 
 
@@ -358,6 +376,9 @@ def read_tracker():
 
 def apply_tracker_state(state):
     global lane, target_x, is_jumping, y_velocity, is_ducking
+    if state == 'RESET' and game_over:
+        reset_game()
+        return
 
     if game_over:
         return
@@ -380,6 +401,7 @@ def apply_tracker_state(state):
             y_velocity = JUMP_FORCE
     elif state == 'D':
         is_ducking = True
+    
 
 
 # ---------------------------------------------------------------------------

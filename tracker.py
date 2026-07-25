@@ -30,11 +30,13 @@ options = PoseLandmarkerOptions(
 NOSE = 0
 L_SHOULDER = 11
 R_SHOULDER = 12
+L_WRIST = 15     
+R_WRIST = 16    
 L_HIP = 23
 R_HIP = 24
 
 # --- State machine ---
-current_state = "C"   # C=Center, L=Left, R=Right, J=Jump, D=Duck
+current_state = "C"   # C=Center, L=Left, R=Right, J=Jump, D=Duck, RESET=Restart
 last_state = "C"
 last_jump_time = 0
 last_duck_time = 0
@@ -101,6 +103,8 @@ with PoseLandmarker.create_from_options(options) as landmarker:
             nose = landmarks[NOSE]
             l_shoulder = landmarks[L_SHOULDER]
             r_shoulder = landmarks[R_SHOULDER]
+            l_wrist = landmarks[L_WRIST]     
+            r_wrist = landmarks[R_WRIST]     
             l_hip = landmarks[L_HIP]
             r_hip = landmarks[R_HIP]
 
@@ -118,28 +122,36 @@ with PoseLandmarker.create_from_options(options) as landmarker:
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             else:
                 current_state = "C"
+                
+                
+                left_hand_raised = l_wrist.y < nose.y and l_wrist.visibility > 0.5
+                right_hand_raised = r_wrist.y < nose.y and r_wrist.visibility > 0.5
+                
+                if left_hand_raised or right_hand_raised:
+                    current_state = "RESET"
+                else:
 
-                # 1. Lane detection
-                if shoulder_x < 0.35:
-                    current_state = "L"
-                elif shoulder_x > 0.65:
-                    current_state = "R"
+                    # 1. Lane detection
+                    if shoulder_x < 0.35:
+                        current_state = "L"
+                    elif shoulder_x > 0.65:
+                        current_state = "R"
 
-                # --- INDEPENDENT THRESHOLDS ---
-                # You can now tune jumping and ducking separately!
-                jump_threshold = baseline_body_height * 0.15 
-                duck_threshold = baseline_body_height * 0.25 
+                    # --- INDEPENDENT THRESHOLDS ---
+                    # You can now tune jumping and ducking separately!
+                    jump_threshold = baseline_body_height * 0.15 
+                    duck_threshold = baseline_body_height * 0.25 
 
-                # 2. Jump detection (SHOULDERS move UP)
-                if shoulder_y < (baseline_shoulder_y - jump_threshold) and time.time() - last_jump_time > 1:
-                    current_state = "J"
-                    last_jump_time = time.time()
+                    # 2. Jump detection (SHOULDERS move UP)
+                    if shoulder_y < (baseline_shoulder_y - jump_threshold) and time.time() - last_jump_time > 1:
+                        current_state = "J"
+                        last_jump_time = time.time()
 
-                # 3. Duck detection (NOSE moves DOWN)
-                # Note: y increases as you go DOWN the screen
-                elif nose.y > (baseline_nose_y + duck_threshold) and time.time() - last_duck_time > 1:
-                    current_state = "D"
-                    last_duck_time = time.time()
+                    # 3. Duck detection (NOSE moves DOWN)
+                    # Note: y increases as you go DOWN the screen
+                    elif nose.y > (baseline_nose_y + duck_threshold) and time.time() - last_duck_time > 1:
+                        current_state = "D"
+                        last_duck_time = time.time()
 
             if current_state != last_state:
                 sock.sendto(current_state.encode("utf-8"), (UDP_IP, UDP_PORT))
