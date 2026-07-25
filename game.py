@@ -95,7 +95,7 @@ print(f"[shader patch] recompiled {len(_patched_list)} shader(s) for macOS GL co
 import socket
 import random
 
-app = Ursina(title="Body Runner", borderless=False)
+app = Ursina(title="Subway Runners", borderless=False)
 
 # Ursina's built-in Sky() actually uses a real bundled gradient texture
 # ('sky_default') and just tints it -- if that texture doesn't load right,
@@ -463,19 +463,7 @@ def update():
     coin_text.text = f"Coins: {coins_collected}"
 
 
-import os
-if os.environ.get('AUTO_SCREENSHOT'):
-    def _snap():
-        base.win.saveScreenshot('verify5.png')
-        application.quit()
-    invoke(_snap, delay=4)
 
-import os
-if os.environ.get('AUTO_SCREENSHOT'):
-    def _snap():
-        base.win.saveScreenshot('verify6.png')
-        application.quit()
-    invoke(_snap, delay=4)
 bg_music = Audio('main.mp3', loop=True, autoplay=True)
 bg_music.volume = 0.5 
 app.run()
