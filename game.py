@@ -146,7 +146,7 @@ TRACK_SCALE = TARGET_CHUNK_LENGTH / MEASURED_LENGTH   # ≈ 0.35
 CHUNK_LENGTH = TARGET_CHUNK_LENGTH
 OBSTACLE_EVERY_N_CHUNKS = 2
 
-TRACK_SCALE_X = 0.26   # increase this to widen -- tweak freely, doesn't affect length
+TRACK_SCALE_X = 0.258   # increase this to widen -- tweak freely, doesn't affect length
 TRACK_SCALE_Y = TRACK_SCALE
 TRACK_SCALE_Z = 0.54
 
@@ -248,8 +248,8 @@ class Chunk:
         mid_z = z_start + CHUNK_LENGTH / 2
         
 
-        track = Entity(model='env', position=(TRACK_X_OFFSET, 4, z_start + CHUNK_LENGTH/2),
-                scale=(TRACK_SCALE_X, TRACK_SCALE_Y, TRACK_SCALE_Z),rotation_y=90)
+        track = Entity(model='env', position=(TRACK_X_OFFSET, 6.1, z_start + CHUNK_LENGTH/2),
+                scale=(TRACK_SCALE_X, TRACK_SCALE_Y+0.2, TRACK_SCALE_Z),rotation_y=89.88)
         self.entities.append(track)
 
         
