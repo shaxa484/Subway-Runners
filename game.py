@@ -148,7 +148,9 @@ OBSTACLE_EVERY_N_CHUNKS = 2
 
 TRACK_SCALE_X = 0.26   # increase this to widen -- tweak freely, doesn't affect length
 TRACK_SCALE_Y = TRACK_SCALE
-TRACK_SCALE_Z = 0.55
+TRACK_SCALE_Z = 0.54
+
+TRACK_X_OFFSET = -0.1  # nudge the whole track model left(-)/right(+) to align with LANES
 
 COLLISION_WINDOW_BY_TYPE = {'barrier': 1.1, 'beam': 1.1, 'train': 2.5}
 
@@ -160,7 +162,7 @@ COLLISION_WINDOW_BY_TYPE = {'barrier': 1.1, 'beam': 1.1, 'train': 2.5}
 # lane markings; this plane guarantees there is never a gap of bare white
 # under your feet no matter what the chunk logic is doing.
 # ---------------------------------------------------------------------------
-ground_safety_plane = Entity(model='cube', color=color.rgb32(70, 150, 80),scale=(40, 0.1, 400), position=(0, -9.1, 0),collider=None)
+#ground_safety_plane = Entity(model='cube', color=color.rgb32(70, 150, 80),scale=(40, 0.1, 400), position=(0, -9.1, 0),collider=None)
 
 # ---------------------------------------------------------------------------
 # Player (invisible capsule-ish box; camera is first-person, attached to it)
@@ -244,8 +246,9 @@ class Chunk:
     def build(self, z_start):
         self.z_start = z_start
         mid_z = z_start + CHUNK_LENGTH / 2
+        
 
-        track = Entity(model='env', position=(0, 4, z_start + CHUNK_LENGTH/2),
+        track = Entity(model='env', position=(TRACK_X_OFFSET, 4, z_start + CHUNK_LENGTH/2),
                 scale=(TRACK_SCALE_X, TRACK_SCALE_Y, TRACK_SCALE_Z),rotation_y=90)
         self.entities.append(track)
 
@@ -477,9 +480,9 @@ def update():
                     continue
                 else:
                     end_game({
-                        'barrier': "Hit a barrier -- try jumping!",
-                        'beam': "Hit a beam -- try ducking!",
-                        'train': "Ran into a train -- switch lanes!",
+                        'barrier': "Hit a barrier - try jumping!",
+                        'beam': "Hit a beam - try ducking!",
+                        'train': "Ran into a train - switch lanes!",
                     }[obs['type']])
 
     score_text.text = f"Score: {int(distance_traveled) + coins_collected * 10}"
