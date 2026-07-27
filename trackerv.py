@@ -1,0 +1,166 @@
+import cv2
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+import socket
+import time
+
+# --- UDP Setup ---
+UDP_IP = "127.0.0.1"
+UDP_PORT = 4242
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+# --- MediaPipe Tasks API Setup ---
+MODEL_PATH = "pose_landmarker.task"  # path to the .task file you downloaded
+
+BaseOptions = mp.tasks.BaseOptions
+PoseLandmarker = mp.tasks.vision.PoseLandmarker
+PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
+
+options = PoseLandmarkerOptions(
+    base_options=BaseOptions(model_asset_path=MODEL_PATH),
+    running_mode=VisionRunningMode.VIDEO,
+    num_poses=1,
+    min_pose_detection_confidence=0.5,
+    min_tracking_confidence=0.5,
+)
+
+# --- Landmark indices (BlazePose 33-point model) ---
+NOSE = 0
+L_SHOULDER = 11
+R_SHOULDER = 12
+L_WRIST = 15     
+R_WRIST = 16    
+L_HIP = 23
+R_HIP = 24
+
+
+# --- Manual landmark drawing ---
+POSE_CONNECTIONS = [
+        (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),
+        (11, 23), (12, 24), (23, 24),
+        (23, 25), (25, 27), (27, 29), (29, 31), (27, 31),
+        (24, 26), (26, 28), (28, 30), (30, 32), (28, 32),
+        (0, 11), (0, 12),
+]
+
+# --- State machine ---
+def run_tracker():
+
+    current_state = "C"   # C=Center, L=Left, R=Right, J=Jump, D=Duck, RESET=Restart
+    last_state = "C"
+    last_jump_time = 0
+    last_duck_time = 0
+
+    # Baseline variables for calibration
+    baseline_body_height = 0.0
+    baseline_shoulder_y = 0.0  
+    baseline_nose_y = 0.0      # <--- NEW: Tracks where the head starts
+
+    
+
+    # --- Open webcam ---
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
+    cap.set(cv2.CAP_PROP_FPS, 60)
+    print("Calibrating... Please stand straight in front of the camera for 2 seconds.")
+    print("Press Ctrl+C in this terminal to stop the tracker.")
+
+    start_time = time.time()
+    prev_timestamp_ms = 0
+
+    try:
+        with PoseLandmarker.create_from_options(options) as landmarker:
+            while cap.isOpened():
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                frame = cv2.flip(frame, 1)
+                h, w, _ = frame.shape
+
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+
+                timestamp_ms = int(time.time() * 1000)
+                if timestamp_ms <= prev_timestamp_ms:
+                    timestamp_ms = prev_timestamp_ms + 1
+                prev_timestamp_ms = timestamp_ms
+
+                result = landmarker.detect_for_video(mp_image, timestamp_ms)
+
+                if result.pose_landmarks and len(result.pose_landmarks) > 0:
+                    landmarks = result.pose_landmarks[0]
+
+                    draw_landmarks(frame, landmarks, w, h)
+
+                    nose = landmarks[NOSE]
+                    l_shoulder = landmarks[L_SHOULDER]
+                    r_shoulder = landmarks[R_SHOULDER]
+                    l_wrist = landmarks[L_WRIST]     
+                    r_wrist = landmarks[R_WRIST]     
+                    l_hip = landmarks[L_HIP]
+                    r_hip = landmarks[R_HIP]
+
+                    shoulder_x = (l_shoulder.x + r_shoulder.x) / 2
+                    shoulder_y = (l_shoulder.y + r_shoulder.y) / 2
+                    hip_y = (l_hip.y + r_hip.y) / 2
+
+                    # --- Calibration ---
+                    if time.time() - start_time < 2:
+                        baseline_body_height = abs(shoulder_y - hip_y)
+                        baseline_shoulder_y = shoulder_y
+                        baseline_nose_y = nose.y  # <--- NEW: Calibrate head position
+                        
+                    
+                    else:
+                        current_state = "C"
+                        
+                        
+                        left_hand_raised = l_wrist.y < nose.y and l_wrist.visibility > 0.5
+                        right_hand_raised = r_wrist.y < nose.y and r_wrist.visibility > 0.5
+                        
+                        if left_hand_raised or right_hand_raised:
+                            current_state = "RESET"
+                        else:
+
+                            # 1. Lane detection
+                            if shoulder_x < 0.35:
+                                current_state = "L"
+                            elif shoulder_x > 0.65:
+                                current_state = "R"
+
+                            # --- INDEPENDENT THRESHOLDS ---
+                            # You can now tune jumping and ducking separately!
+                            jump_threshold = baseline_body_height * 0.15 
+                            duck_threshold = baseline_body_height * 0.25 
+
+                            # 2. Jump detection (SHOULDERS move UP)
+                            if shoulder_y < (baseline_shoulder_y - jump_threshold) and time.time() - last_jump_time > 1:
+                                current_state = "J"
+                                last_jump_time = time.time()
+
+                            # 3. Duck detection (NOSE moves DOWN)
+                            # Note: y increases as you go DOWN the screen
+                            elif nose.y > (baseline_nose_y + duck_threshold) and time.time() - last_duck_time > 1:
+                                current_state = "D"
+                                last_duck_time = time.time()
+
+                    if current_state != last_state:
+                        sock.sendto(current_state.encode("utf-8"), (UDP_IP, UDP_PORT))
+                        print(f"Sent state: {current_state}")
+                        last_state = current_state
+
+    except KeyboardInterrupt:
+        print("\nStopping tracker...")
+        
+    finally:
+        # Clean up connections and release camera
+        cap.release()
+        sock.close()
+        print("Tracker safely closed.")
+                
+
+       

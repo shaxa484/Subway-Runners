@@ -125,7 +125,7 @@ except OSError as e:
 # Tunables
 # ---------------------------------------------------------------------------
 LANES = {-1: -2.6, 0: 0, 1: 2.6}      # lane index -> world x position
-LANE_SNAP_SPEED = 14                   # how quickly player slides between lanes
+LANE_SNAP_SPEED = 15                   # how quickly player slides between lanes
 BASE_SPEED = 14                        # forward units/sec
 MAX_SPEED = 34
 SPEED_RAMP = 0.15                      # speed gained per second survived
