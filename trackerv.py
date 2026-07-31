@@ -94,7 +94,7 @@ def run_tracker():
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
                     landmarks = result.pose_landmarks[0]
 
-                    draw_landmarks(frame, landmarks, w, h)
+                    #draw_landmarks(frame, landmarks, w, h)
 
                     nose = landmarks[NOSE]
                     l_shoulder = landmarks[L_SHOULDER]

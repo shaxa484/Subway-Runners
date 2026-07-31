@@ -16,6 +16,9 @@ no other setup needed.
 """
 
 from ursina import *
+import sys, os
+if getattr(sys, 'frozen', False):
+    application.asset_folder = Path(os.environ.get('SUBWAY_RUNNER_ASSETS', sys._MEIPASS))    
 from panda3d.core import loadPrcFileData
 # Every log from this Mac shows "iCCP: known incorrect sRGB profile", and the
 # visible symptom (muted/mid-brightness colors washing toward white, while
@@ -24,6 +27,7 @@ from panda3d.core import loadPrcFileData
 # framebuffer conversion stops Panda3D from re-applying a gamma curve on
 # top of whatever macOS's color pipeline is already doing.
 loadPrcFileData('', 'framebuffer-srgb false')
+loadPrcFileData('', 'load-display pandagl')
 import pkgutil
 import importlib
 import re
@@ -90,6 +94,9 @@ def _patch_shaders_for_mac_gl_compat():
 
 _patched_list = _patch_shaders_for_mac_gl_compat()
 print(f"[shader patch] recompiled {len(_patched_list)} shader(s) for macOS GL compatibility")
+print(f"[shader patch] Entity.default_shader = {Entity.default_shader!r}")
+if Entity.default_shader is not None:
+    print(f"[shader patch] header: {Entity.default_shader.vertex.splitlines()[0]!r}")
 # ------------------------------------------------------------------------
 
 import socket
@@ -422,6 +429,9 @@ def update():
 
     if game_over:
         return
+    
+    if int(run_time * 2) % 20 == 0:  # print roughly every 10 seconds, not every frame
+        print(f"[debug] run_time={run_time:.2f} speed={speed:.2f} player.z={player.z:.2f} time.dt={time.dt:.4f} game_over={game_over}")
 
     run_time += time.dt
     speed = min(MAX_SPEED, BASE_SPEED + run_time * SPEED_RAMP)
@@ -492,4 +502,5 @@ def update():
 
 bg_music = Audio('main.mp3', loop=True, autoplay=True)
 bg_music.volume = 0.5 
-app.run()
+if __name__ == "__main__":
+    app.run()

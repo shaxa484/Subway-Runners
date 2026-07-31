@@ -11,17 +11,17 @@ This is the file to point PyInstaller at, not game.py or tracker.py directly.
 import multiprocessing
 import sys
 import os
-
+from pathlib import Path
 
 def _resource_path_setup():
-    """When frozen by PyInstaller, bundled data (models/, sounds/, the
-    MediaPipe .task file) gets unpacked to a temp folder at sys._MEIPASS,
-    not to the folder the exe sits in. Point both scripts' asset lookups
-    there when running frozen; in normal dev use, this does nothing."""
     if getattr(sys, 'frozen', False):
-        base_path = sys._MEIPASS
-        os.chdir(base_path)
-
+        exe_path = Path(sys.executable).resolve()
+        if '.app' in str(exe_path):
+            resource_path = exe_path.parent.parent / 'Resources'
+        else:
+            resource_path = Path(sys._MEIPASS)
+        os.environ['SUBWAY_RUNNER_ASSETS'] = str(resource_path)
+        os.chdir(resource_path)
 
 def main():
     # Required on Windows/macOS frozen apps that use multiprocessing --
@@ -29,15 +29,18 @@ def main():
     # file, causing an infinite relaunch loop. Must be the first thing
     # that runs.
     multiprocessing.freeze_support()
-
+    
     _resource_path_setup()
 
-    from tracker import run_tracker
+    from trackerv import run_tracker
     tracker_process = multiprocessing.Process(target=run_tracker, daemon=True)
     tracker_process.start()
 
     try:
         import game  # noqa: F401 -- importing runs game.py's app.run() and blocks here
+        globals()['update'] = game.update
+        globals()['input'] = game.input
+        game.app.run()
     finally:
         tracker_process.terminate()
 
