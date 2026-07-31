@@ -4,3 +4,6 @@ __pycache__
 .DS_Store
 Assets/
 production/
+build/
+dist/
+SubwayRunners.spec

@@ -120,6 +120,7 @@ application.development_mode = False  # hides the debug/stats overlay
 # ---------------------------------------------------------------------------
 UDP_IP = "127.0.0.1"
 UDP_PORT = 4242
+CONTROL_PORT = 4243   # game -> tracker: tells it exactly when to start calibrating
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.setblocking(False)
 try:
@@ -127,6 +128,12 @@ try:
     print(f"Listening for tracker on {UDP_IP}:{UDP_PORT}")
 except OSError as e:
     print(f"Could not bind UDP socket ({e}) -- keyboard controls still work.")
+
+def send_begin_calibration():
+    try:
+        sock.sendto(b"BEGIN_CAL", (UDP_IP, CONTROL_PORT))
+    except OSError:
+        pass  # tracker not running -- fine for keyboard-only play
 
 # ---------------------------------------------------------------------------
 # Tunables
@@ -214,6 +221,73 @@ help_text = Text(
     text="Lean L/R = change lane   Jump = hop   \nDuck = crouch Hand raise = restart\n(Keyboard: A/D, Space, S)",
     position=(UI_LEFT, -0.38), scale=0.9, color=color.rgba32(255, 255, 255, 220)
 )
+
+# ---------------------------------------------------------------------------
+# Menu / countdown screens
+# ---------------------------------------------------------------------------
+# Players start here instead of straight into gameplay. This gives the
+# camera time to connect and, importantly, gives a body-tracked player time
+# to actually step back from the laptop before the tracker takes its
+# baseline measurements -- doing that up close was producing bad calibration.
+COUNTDOWN_DURATION = 5.0  # seconds shown on screen; tracker calibrates during the last 2
+
+screen_state = 'MENU'   # 'MENU' -> 'COUNTDOWN' -> 'PLAYING'
+cam_ready = False
+countdown_timer = 0.0
+
+menu_panel = Entity(parent=camera.ui, model='quad', color=color.rgba32(10, 10, 15, 200),
+                     scale=(1.1, 0.5), position=(0, 0), z=0.02)
+menu_title = Text(text="BODY RUNNER", position=(0, 0.18), origin=(0, 0), scale=2.4,
+                   color=color.white)
+menu_subtitle = Text(
+    text="Step back from your laptop so you're fully in frame.\nConnecting to camera...",
+    position=(0, 0.06), origin=(0, 0), scale=1.1, color=color.rgba32(255, 255, 255, 220)
+)
+menu_prompt = Text(
+    text="Raise a hand when you're ready  --  or press SPACE",
+    position=(0, -0.08), origin=(0, 0), scale=1.2, color=color.yellow
+)
+
+countdown_text = Text(text="", position=(0, 0.05), origin=(0, 0), scale=4,
+                       color=color.white, enabled=False)
+countdown_subtext = Text(text="", position=(0, -0.1), origin=(0, 0), scale=1.2,
+                          color=color.rgba32(255, 255, 255, 220), enabled=False)
+
+
+# HUD/help are gameplay-only -- hide them until the player actually starts.
+hud_panel.enabled = False
+score_text.enabled = False
+coin_text.enabled = False
+help_text.enabled = False
+
+
+def start_countdown():
+    global screen_state, countdown_timer
+    if screen_state != 'MENU':
+        return
+    screen_state = 'COUNTDOWN'
+    countdown_timer = COUNTDOWN_DURATION
+    send_begin_calibration()
+
+    menu_panel.enabled = False
+    menu_title.enabled = False
+    menu_subtitle.enabled = False
+    menu_prompt.enabled = False
+    countdown_text.enabled = True
+    countdown_subtext.enabled = True
+
+
+def begin_playing():
+    global screen_state
+    screen_state = 'PLAYING'
+    countdown_text.enabled = False
+    countdown_subtext.enabled = False
+    hud_panel.enabled = True
+    score_text.enabled = True
+    coin_text.enabled = True
+    help_text.enabled = True
+    reset_game()
+
 
 game_over_panel_border = Entity(parent=camera.ui, model='quad', color=color.rgba32(200, 40, 40, 255),
                                  scale=(window.aspect_ratio + 0.02, 0.36), position=(0, 0.06),
@@ -346,6 +420,14 @@ def end_game(reason):
 def input(key):
     global lane, target_x, is_jumping, y_velocity, is_ducking
 
+    if screen_state == 'MENU':
+        if key == 'space':
+            start_countdown()
+        return
+    
+    if screen_state == 'COUNTDOWN':
+        return  # ignore input while calibrating/counting down
+    
     if key == 'r' and game_over:
         reset_game()
         return
@@ -419,8 +501,37 @@ def apply_tracker_state(state):
 # ---------------------------------------------------------------------------
 def update():
     global is_jumping, y_velocity, distance_traveled, speed, run_time, coins_collected
-
+    global cam_ready, countdown_timer
+    
     state = read_tracker()
+
+    if state == 'CAM_READY':
+        cam_ready = True
+        if screen_state == 'MENU':
+            menu_subtitle.text = "Step back from your laptop so you're fully in frame.\nCamera connected!"
+        state = None  # not a gameplay command, don't fall through to apply_tracker_state
+
+    if screen_state == 'MENU':
+        # Raising a hand (or pressing SPACE, handled in input()) starts the
+        # countdown. Works with or without cam_ready so keyboard-only
+        # players are never blocked on a camera they're not using.
+        if state == 'RESET':
+            start_countdown()
+        return
+    
+    if screen_state == 'COUNTDOWN':
+        countdown_timer -= time.dt
+        remaining = max(0, countdown_timer)
+        if remaining <= 0.15:
+            countdown_text.text = "GO!"
+        else:
+            countdown_text.text = str(math.ceil(remaining))
+        countdown_subtext.text = "Get in position..." if remaining > 2 else "Calibrating -- hold still..."
+        if countdown_timer <= 0:
+            begin_playing()
+        return
+    
+    # screen_state == 'PLAYING' from here on
     if state:
         apply_tracker_state(state)
     global duck_timer
@@ -430,9 +541,6 @@ def update():
     if game_over:
         return
     
-    if int(run_time * 2) % 20 == 0:  # print roughly every 10 seconds, not every frame
-        print(f"[debug] run_time={run_time:.2f} speed={speed:.2f} player.z={player.z:.2f} time.dt={time.dt:.4f} game_over={game_over}")
-
     run_time += time.dt
     speed = min(MAX_SPEED, BASE_SPEED + run_time * SPEED_RAMP)
 

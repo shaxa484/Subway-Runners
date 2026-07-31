@@ -10,6 +10,30 @@ UDP_IP = "127.0.0.1"
 UDP_PORT = 4242
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+# --- Reverse control channel (game -> tracker) ---
+# Lets the game tell us exactly when to start the 2-second calibration
+# window, instead of us starting it the instant this process launches.
+CONTROL_PORT = 4243
+control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+control_sock.setblocking(False)
+try:
+    control_sock.bind((UDP_IP, CONTROL_PORT))
+except OSError as e:
+    print(f"Could not bind control socket ({e}) -- game can't trigger calibration start.")
+
+def read_control():
+    """Non-blocking read of the latest command from the game. Returns None or a str."""
+    latest = None
+    try:
+        while True:
+            data, _ = control_sock.recvfrom(64)
+            latest = data.decode('utf-8').strip()
+    except BlockingIOError:
+        pass
+    except OSError:
+        pass
+    return latest
+
 # --- MediaPipe Tasks API Setup ---
 MODEL_PATH = "pose_landmarker.task"  # path to the .task file you downloaded
 
@@ -61,14 +85,32 @@ def run_tracker():
     
 
     # --- Open webcam ---
+    # On macOS, the very first VideoCapture(0) call fires the permission
+    # dialog ASYNCHRONOUSLY and returns immediately, before the user has
+    # clicked Allow/Deny -- cap.isOpened() is False at that instant, so
+    # failing on the first check fails regardless of what the user clicks.
+    # Retry for a few seconds to give them a chance to respond to the prompt.
     cap = cv2.VideoCapture(0)
+    retry_deadline = time.time() + 15
+    while not cap.isOpened() and time.time() < retry_deadline:
+        time.sleep(0.3)
+        cap.open(0)
+    
+    if not cap.isOpened():
+        print("Camera could not be opened -- check System Settings > Privacy > Camera.")
+
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
     cap.set(cv2.CAP_PROP_FPS, 60)
-    print("Calibrating... Please stand straight in front of the camera for 2 seconds.")
+    
+    # Tell the game the camera is live so it can update the menu screen.
+    sock.sendto(b"CAM_READY", (UDP_IP, UDP_PORT))
     print("Press Ctrl+C in this terminal to stop the tracker.")
-
-    start_time = time.time()
+    
+    # Calibration no longer starts automatically -- it waits for a
+    # "BEGIN_CAL" command from the game, sent once the player has
+    # confirmed they're ready and stepped back into position.
+    calibration_start_time = None
     prev_timestamp_ms = 0
 
     try:
@@ -91,6 +133,11 @@ def run_tracker():
 
                 result = landmarker.detect_for_video(mp_image, timestamp_ms)
 
+                cmd = read_control()
+                if cmd == "BEGIN_CAL" and calibration_start_time is None:
+                    calibration_start_time = time.time()
+                    print("Calibration started.")
+                    
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
                     landmarks = result.pose_landmarks[0]
 
@@ -108,19 +155,25 @@ def run_tracker():
                     shoulder_y = (l_shoulder.y + r_shoulder.y) / 2
                     hip_y = (l_hip.y + r_hip.y) / 2
 
-                    # --- Calibration ---
-                    if time.time() - start_time < 2:
+                    # Hand-raise doesn't depend on any baseline, so it works
+                    # even before calibration has happened -- this doubles
+                    # as the "I'm ready, start the game" signal from the menu.
+                    left_hand_raised = l_wrist.y < nose.y and l_wrist.visibility > 0.5
+                    right_hand_raised = r_wrist.y < nose.y and r_wrist.visibility > 0.5
+                    
+                    if calibration_start_time is None:
+                        # Waiting on the game to send BEGIN_CAL. Still report
+                        # hand raises so the menu can treat them as "start".
+                        current_state = "RESET" if (left_hand_raised or right_hand_raised) else "WAIT"                
+                    
+                    elif time.time() - calibration_start_time < 2:
                         baseline_body_height = abs(shoulder_y - hip_y)
                         baseline_shoulder_y = shoulder_y
                         baseline_nose_y = nose.y  # <--- NEW: Calibrate head position
+                        current_state = "CALIBRATING"
                         
-                    
                     else:
                         current_state = "C"
-                        
-                        
-                        left_hand_raised = l_wrist.y < nose.y and l_wrist.visibility > 0.5
-                        right_hand_raised = r_wrist.y < nose.y and r_wrist.visibility > 0.5
                         
                         if left_hand_raised or right_hand_raised:
                             current_state = "RESET"
@@ -160,6 +213,7 @@ def run_tracker():
         # Clean up connections and release camera
         cap.release()
         sock.close()
+        control_sock.close()
         print("Tracker safely closed.")
                 
 
