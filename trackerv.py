@@ -10,29 +10,8 @@ UDP_IP = "127.0.0.1"
 UDP_PORT = 4242
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-# --- Reverse control channel (game -> tracker) ---
-# Lets the game tell us exactly when to start the 2-second calibration
-# window, instead of us starting it the instant this process launches.
-CONTROL_PORT = 4243
-control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-control_sock.setblocking(False)
-try:
-    control_sock.bind((UDP_IP, CONTROL_PORT))
-except OSError as e:
-    print(f"Could not bind control socket ({e}) -- game can't trigger calibration start.")
-
-def read_control():
-    """Non-blocking read of the latest command from the game. Returns None or a str."""
-    latest = None
-    try:
-        while True:
-            data, _ = control_sock.recvfrom(64)
-            latest = data.decode('utf-8').strip()
-    except BlockingIOError:
-        pass
-    except OSError:
-        pass
-    return latest
+# --- Reverse control channel (game -> tracker) is set up inside run_tracker(),
+# not here -- see note there about why.
 
 # --- MediaPipe Tasks API Setup ---
 MODEL_PATH = "pose_landmarker.task"  # path to the .task file you downloaded
@@ -72,6 +51,43 @@ POSE_CONNECTIONS = [
 # --- State machine ---
 def run_tracker():
 
+    # --- Reverse control channel (game -> tracker) ---
+    # Set up HERE, not at module level: on macOS, multiprocessing uses the
+    # 'spawn' start method, which re-imports this module in the child
+    # process to reconstruct run_tracker. Module-level socket.bind() would
+    # therefore run twice -- once in main.py's parent process (from
+    # `from trackerv import run_tracker`) and once in the spawned child --
+    # and the second bind always fails with "Address already in use".
+    # Scoping it inside the function that's actually used as the process
+    # target means it only ever executes once, in the child process.
+    CONTROL_PORT = 4243
+    control_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    control_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    control_sock.setblocking(False)
+    control_bound = False
+    try:
+        control_sock.bind((UDP_IP, CONTROL_PORT))
+        control_bound = True
+    except OSError as e:
+        print(f"Could not bind control socket ({e}) -- game can't trigger calibration start.")
+        print(f"Likely a leftover tracker process is still holding port {CONTROL_PORT}.")
+        print(f"Run: lsof -nP -iUDP:{CONTROL_PORT}   then kill -9 <PID>, and restart.")
+
+    def read_control():
+        """Non-blocking read of the latest command from the game. Returns None or a str."""
+        if not control_bound:
+            return None
+        latest = None
+        try:
+            while True:
+                data, _ = control_sock.recvfrom(64)
+                latest = data.decode('utf-8').strip()
+        except BlockingIOError:
+            pass
+        except OSError:
+            pass
+        return latest
+
     current_state = "C"   # C=Center, L=Left, R=Right, J=Jump, D=Duck, RESET=Restart
     last_state = "C"
     last_jump_time = 0
@@ -95,18 +111,18 @@ def run_tracker():
     while not cap.isOpened() and time.time() < retry_deadline:
         time.sleep(0.3)
         cap.open(0)
-    
+
     if not cap.isOpened():
         print("Camera could not be opened -- check System Settings > Privacy > Camera.")
 
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M','J','P','G'))
     cap.set(cv2.CAP_PROP_FPS, 60)
-    
+
     # Tell the game the camera is live so it can update the menu screen.
     sock.sendto(b"CAM_READY", (UDP_IP, UDP_PORT))
     print("Press Ctrl+C in this terminal to stop the tracker.")
-    
+
     # Calibration no longer starts automatically -- it waits for a
     # "BEGIN_CAL" command from the game, sent once the player has
     # confirmed they're ready and stepped back into position.
@@ -137,7 +153,7 @@ def run_tracker():
                 if cmd == "BEGIN_CAL" and calibration_start_time is None:
                     calibration_start_time = time.time()
                     print("Calibration started.")
-                    
+
                 if result.pose_landmarks and len(result.pose_landmarks) > 0:
                     landmarks = result.pose_landmarks[0]
 
@@ -160,21 +176,21 @@ def run_tracker():
                     # as the "I'm ready, start the game" signal from the menu.
                     left_hand_raised = l_wrist.y < nose.y and l_wrist.visibility > 0.5
                     right_hand_raised = r_wrist.y < nose.y and r_wrist.visibility > 0.5
-                    
+
                     if calibration_start_time is None:
                         # Waiting on the game to send BEGIN_CAL. Still report
                         # hand raises so the menu can treat them as "start".
-                        current_state = "RESET" if (left_hand_raised or right_hand_raised) else "WAIT"                
-                    
+                        current_state = "RESET" if (left_hand_raised or right_hand_raised) else "WAIT"
+
                     elif time.time() - calibration_start_time < 2:
                         baseline_body_height = abs(shoulder_y - hip_y)
                         baseline_shoulder_y = shoulder_y
                         baseline_nose_y = nose.y  # <--- NEW: Calibrate head position
                         current_state = "CALIBRATING"
-                        
+
                     else:
                         current_state = "C"
-                        
+
                         if left_hand_raised or right_hand_raised:
                             current_state = "RESET"
                         else:
