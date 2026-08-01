@@ -238,7 +238,7 @@ countdown_timer = 0.0
 
 menu_panel = Entity(parent=camera.ui, model='quad', color=color.rgba32(10, 10, 15, 200),
                      scale=(1.1, 0.5), position=(0, 0), z=0.02)
-menu_title = Text(text="BODY RUNNER", position=(0, 0.18), origin=(0, 0), scale=2.4,
+menu_title = Text(text="SUBWAY RUNNER", position=(0, 0.18), origin=(0, 0), scale=2.4,
                    color=color.white)
 menu_subtitle = Text(
     text="Step back from your laptop so you're fully in frame.\nConnecting to camera...",
