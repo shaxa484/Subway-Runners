@@ -103,6 +103,7 @@ import socket
 import random
 
 app = Ursina(title="Subway Runners", borderless=False)
+window.fullscreen = True
 
 # Ursina's built-in Sky() actually uses a real bundled gradient texture
 # ('sky_default') and just tints it -- if that texture doesn't load right,
