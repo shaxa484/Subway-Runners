@@ -1,24 +1,69 @@
-# 🏃‍♂️ Subway Runners (Motion-Controlled) - Work in Progress
+# Subway Runners
 
-An interactive endless runner where **your real-world movement controls the game**. 
+A first-person, body-controlled endless runner — think *Subway Surfers*, but you're the controller. Lean, jump, and duck with your own body in front of a webcam; no keyboard needed (though it's there as a backup).
 
-Instead of using a keyboard or controller, this project uses a webcam and computer vision to track your physical body. When you run, dodge, or jump in front of your camera, the character in the game mimics your movements in real-time!
+> **Status: Alpha.** Core gameplay loop, body tracking, and a packaged Mac build all work. Expect rough edges and a bit rigid tracking.
 
-## 🎮 How It Works
-This project bridges Python-based pose estimation with the Game itself:
-* **The Tracker (`tracker.py`):** A Python script that uses computer vision (via webcam) to detect player movement, body position, and gestures.(Current methods are a bit rigid but I'm working on more efficient and stable methods)
-* **The Game:** Built in Python with Ursina and Panda3d libraries , which receives the motion data from the tracker and translates it into character actions (running, switching lanes, jumping).
+## How it works
 
-## 🛠️ Tech Stack
-* **Game Engine:** Ursina / Panda3d
-* **Computer Vision:** Python (OpenCV / MediaPipe)
-* **Integration:** UDP port communication
+A [MediaPipe](https://developers.google.com/mediapipe) pose-tracking process reads your webcam feed and turns your movement into simple signals — lean left/right, jump, duck, raise a hand — sent locally over UDP. The game itself is a first-person 3D runner built with [Ursina](https://www.ursinaengine.org/) (on top of Panda3D), reading those signals to control your character in real time.
 
-## 🚧 Current Progress
-* [x] Basic Python webcam tracker implementation (`tracker.py`).
-* [x] Foundation for the game environment.
-* [x] Establish smooth data bridging between tracker and game.
-* [x] Use real game models and sound effects for better experience .
-* [ ] Fully polishing.
+## Controls
 
-*Note: Gameplay footage and a demonstration of the webcam tracking in action will be added once it is fully polished!*
+| Action | Body | Keyboard (fallback) |
+|---|---|---|
+| Change lane | Lean left / right | `A` / `D` or arrow keys |
+| Jump | Jump in place | `Space` |
+| Duck | Crouch (hold) | `S` or down arrow |
+| Ready up / Restart | Raise a hand | `Space` |
+| Quit | — | `Esc` |
+
+## Getting started
+
+### Option 1 — Download the release (Mac only, for now)
+
+Grab the latest `.zip` from the [Releases](../../releases) page, unzip it, and:
+
+1. **Right-click → Open** the app the first time (it's unsigned, so macOS will otherwise refuse to launch it — this is normal, one-time).
+2. Allow camera access when prompted.
+3. Step back so your whole upper body is in frame, then raise a hand or press `Space` to begin.
+
+Built and tested on Apple Silicon (M1). If you're on an Intel Mac or Windows — you'll currently need to run from source instead.
+
+### Option 2 — Run from source
+
+```bash
+git clone <your-repo-url>
+cd Subway-Runners
+python3 -m venv venv
+source venv/bin/activate
+pip install opencv-python mediapipe ursina
+```
+
+You'll also need a `pose_landmarker.task` model file (from MediaPipe) in the project root, plus the `models/` and `sounds/` asset folders included in this repo.
+
+Run the main script — tracker and game will be opened by it:
+```bash
+python3 main.py
+```
+
+## Known issues (alpha)
+
+- **Mac-only build for now.** No Windows/Intel Mac build yet — PyInstaller builds are tied to the machine that builds them, so a native build on each platform is needed eventually.
+- **Unsigned app.** Expect Gatekeeper's "unidentified developer" warning on first launch.
+- **Lighting/track polish is ongoing.** Some visuals are being added and getting improved a long the new releases.
+- **Calibration is sensitive to camera position/lighting.** Best results standing a few feet back, well-lit, facing the camera directly.
+
+## Roadmap
+
+- Windows build
+- More obstacle/track variety
+- Persistent high scores
+- General visual polish pass
+
+## Built with
+
+- [Ursina Engine](https://www.ursinaengine.org/) / [Panda3D](https://www.panda3d.org/)
+- [MediaPipe](https://developers.google.com/mediapipe) Pose Landmarker
+- [OpenCV](https://opencv.org/)
+- [PyInstaller](https://pyinstaller.org/) for packaging
