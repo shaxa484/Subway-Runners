@@ -28,6 +28,24 @@ Grab the latest `.zip` from the [Releases](../../releases) page, unzip it, and:
 2. Allow camera access when prompted.
 3. Step back so your whole upper body is in frame, then raise a hand or press `Space` to begin.
 
+> **First launch is slow — this is normal, not a hang.** macOS scans a fresh
+> unsigned app on first open (Gatekeeper) and this build bundles a fair
+> amount of native code (MediaPipe, Panda3D, OpenCV), so the first launch
+> can take **30–60+ seconds** before a window appears. **Don't quit and
+> reopen it during this time** — repeated attempts while it's still loading
+> is the most common cause of it appearing to fail. Give it a full minute
+> before assuming something's wrong.
+>
+> If it still won't open, or macOS blocks it outright, run this once in
+> Terminal (adjust the path if you unzipped it somewhere other than
+> Downloads):
+> ```
+> xattr -r -c ~/Downloads/SubwayRunners.app
+> ```
+> This clears the "downloaded from the internet" quarantine flag that
+> otherwise makes macOS refuse to run unsigned apps. You only need to do
+> this once per download.
+
 Built and tested on Apple Silicon (M1). If you're on an Intel Mac or Windows — you'll currently need to run from source instead.
 
 ### Option 2 — Run from source
