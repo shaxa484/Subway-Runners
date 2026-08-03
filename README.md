@@ -69,7 +69,7 @@ python3 main.py
 
 - **Mac-only build for now.** No Windows/Intel Mac build yet — PyInstaller builds are tied to the machine that builds them, so a native build on each platform is needed eventually.
 - **Unsigned app.** Expect Gatekeeper's "unidentified developer" warning on first launch.
-- **Lighting/track polish is ongoing.** Some visuals are being added and getting improved a long the new releases.
+- **Lighting/track polish is ongoing.** Some visuals are being added and getting improved along the new releases.
 - **Calibration is sensitive to camera position/lighting.** Best results standing a few feet back, well-lit, facing the camera directly.
 
 ## Roadmap
