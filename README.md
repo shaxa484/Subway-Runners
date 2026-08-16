@@ -12,7 +12,7 @@ A [MediaPipe](https://developers.google.com/mediapipe) pose-tracking process rea
 
 | Action | Body | Keyboard (fallback) |
 |---|---|---|
-| Change lane | Lean left / right | `A` / `D` or arrow keys |
+| Change lane | Move to left / right | `A` / `D` or arrow keys |
 | Jump | Jump in place | `Space` |
 | Duck | Crouch (hold) | `S` or down arrow |
 | Ready up / Restart | Raise a hand | `Space` |
