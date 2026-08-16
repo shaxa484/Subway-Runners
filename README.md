@@ -27,7 +27,7 @@ Grab the latest `.zip` from the [Releases](../../releases) page, unzip it, and:
 2. Allow camera access when prompted.
 3. Step back so your whole upper body is in frame, then raise a hand or press `Space` to begin.
 
-> **First launch is slow — this is normal, not a hang.** macOS scans a fresh
+> **⚠️First launch is slow — this is normal, not a hang.** macOS scans a fresh
 > unsigned app on first open (Gatekeeper) and this build bundles a fair
 > amount of native code (MediaPipe, Panda3D, OpenCV), so the first launch
 > can take **30–60+ seconds** before a window appears. **Don't quit and
