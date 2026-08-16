@@ -16,7 +16,6 @@ A [MediaPipe](https://developers.google.com/mediapipe) pose-tracking process rea
 | Jump | Jump in place | `Space` |
 | Duck | Crouch (hold) | `S` or down arrow |
 | Ready up / Restart | Raise a hand | `Space` |
-| Quit | — | `Esc` |
 
 ## Getting started
 
